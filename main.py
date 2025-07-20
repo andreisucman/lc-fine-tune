@@ -20,7 +20,7 @@ LORA_DROPOUT = 0.05
 GRAD_ACCUM_STEPS = 1
 BATCH_SIZE = 8  # Increased for A100 80GB
 MAX_SEQ_LENGTH = 128_000  # Full context length
-EPOCHS = 8
+EPOCHS = 5
 LEARNING_RATE = 2e-5  # Optimized learning rate
 OUTPUT_DIR = "./gemma-3-4b-it-lora-finetuned"
 REPO_ID = "Sunchain/gemma-3-4b-it-dolly-alpaca-ro"
@@ -122,9 +122,9 @@ dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
 alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
 legal_dataset = Dataset.from_list(legal_dataset).shuffle()
 
-dolly_train = dolly_dataset.select(range(0, 11500))
-alpaca_train = alpaca_dataset.select(range(0, 11500))
-legal_train = legal_dataset.select(range(0, 44000))
+dolly_train = dolly_dataset.select(range(0, 13500))
+alpaca_train = alpaca_dataset.select(range(0, 13500))
+legal_train = legal_dataset.select(range(0, 48000))
 
 del dolly_dataset
 del alpaca_dataset
@@ -176,7 +176,6 @@ trainer = SFTTrainer(
     args=training_args,
     train_dataset=dataset,
     peft_config=peft_config,
-    max_seq_length=MAX_SEQ_LENGTH
 )
 
 # Train
