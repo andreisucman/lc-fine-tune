@@ -7,6 +7,7 @@ from transformers import (
     AutoModelForCausalLM,
     BitsAndBytesConfig,
     TrainingArguments,
+    EarlyStoppingCallback
 )
 from trl import SFTTrainer
 from unsloth.chat_templates import get_chat_template
@@ -15,13 +16,12 @@ from unsloth.chat_templates import get_chat_template
 MODEL_ID = "google/gemma-3-4b-it"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 LORA_RANK = 8  # Increased rank for better performance
-LORA_ALPHA = 32
+LORA_ALPHA = 16
 LORA_DROPOUT = 0.05
 GRAD_ACCUM_STEPS = 1
 BATCH_SIZE = 8  # Increased for A100 80GB
-MAX_SEQ_LENGTH = 128_000  # Full context length
-EPOCHS = 5
-LEARNING_RATE = 2e-5  # Optimized learning rate
+EPOCHS = 4
+LEARNING_RATE = 1e-4  # Optimized learning rate
 OUTPUT_DIR = "./gemma-3-4b-it-lora-finetuned"
 REPO_ID = "Sunchain/gemma-3-4b-it-dolly-alpaca-ro"
 
@@ -110,27 +110,23 @@ def format_conversations(data_list, type):
 
     return items
 
-dolly_dataset = format_conversations(dolly_list, "dolly")
-alpaca_dataset = format_conversations(alpaca_list, "alpaca")
-legal_dataset = format_conversations(legal_list, "legal")
-
-del alpaca_list
-del dolly_list
-del legal_list
-
 dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
 alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
 legal_dataset = Dataset.from_list(legal_dataset).shuffle()
 
+dolly_eval = dolly_dataset.select(range(13500, 15000))  # Last 1.5k
+alpaca_eval = alpaca_dataset.select(range(13500, 15000))
+legal_eval = legal_dataset.select(range(44000, 48000))  # Last 4k for validation
+
 dolly_train = dolly_dataset.select(range(0, 13500))
 alpaca_train = alpaca_dataset.select(range(0, 13500))
-legal_train = legal_dataset.select(range(0, 48000))
+legal_train = legal_dataset.select(range(0, 44000))
 
 del dolly_dataset
 del alpaca_dataset
 del legal_dataset
 
-dataset = interleave_datasets(
+train_dataset = interleave_datasets(
     [dolly_train, alpaca_train, legal_train],
     probabilities=[0.15, 0.15,0.70],
     seed=42
@@ -140,13 +136,19 @@ del dolly_train
 del alpaca_train
 del legal_train
 
+eval_dataset = interleave_datasets(
+    [dolly_eval, alpaca_eval, legal_eval],
+    probabilities=[0.15, 0.15,0.70],
+    seed=42
+)
 
 def formatting_prompts_func(examples):
    convos = examples["conversations"]
    texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False).removeprefix('<bos>') for convo in convos]
    return { "text" : texts, }
 
-dataset = dataset.map(formatting_prompts_func, batched = True)
+train_dataset = train_dataset.map(formatting_prompts_func, batched = True)
+eval_dataset = eval_dataset.map(formatting_prompts_func, batched = True)
 
 # ---------------------------
 # Training setup with Flash Attention optimizations
@@ -158,15 +160,25 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=BATCH_SIZE,
     gradient_accumulation_steps=GRAD_ACCUM_STEPS,
     learning_rate=LEARNING_RATE,
-    optim="paged_adamw_8bit",  # Memory-efficient optimizer
-    logging_steps=10,
+    optim="AdamW",  # Memory-efficient optimizer
+    weight_decay = 0.01,
+    logging_steps=100,
+    eval_strategy="steps",
+    eval_steps=1000,
+    save_strategy="steps",
+    save_steps=500,
+    save_total_limit=2,
+    metric_for_best_model="eval_loss",
+    load_best_model_at_end=True,
     bf16=True,  # Force BF16 for A100
     fp16=False,  # Disable FP16 when using BF16
     max_grad_norm=0.3,
     warmup_ratio=0.03,
-    lr_scheduler_type="linear",
+    lr_scheduler_type="cosine",
     report_to="none",
+    seed = 3407,
     gradient_checkpointing=True,  # Enable for memory savings
+    gradient_checkpointing_kwargs={"use_reentrant": False},
     max_steps=-1,
     group_by_length=True,  # Improves efficiency with packing
 )
@@ -174,10 +186,18 @@ training_args = TrainingArguments(
 trainer = SFTTrainer(
     model=model,
     args=training_args,
-    train_dataset=dataset,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
     peft_config=peft_config,
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
 )
 
+from unsloth.chat_templates import train_on_responses_only
+trainer = train_on_responses_only(
+    trainer,
+    instruction_part = "<start_of_turn>user\n",
+    response_part = "<start_of_turn>model\n",
+)
 # Train
 trainer.train()
 
