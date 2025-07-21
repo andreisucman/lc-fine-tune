@@ -90,6 +90,10 @@ dolly_list = [dict(item) for item in dolly_dataset]
 alpaca_list = [dict(item) for item in alpaca_dataset]
 legal_list = [dict(item) for item in legal_dataset]
 
+dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
+alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
+legal_dataset = Dataset.from_list(legal_dataset).shuffle()
+
 def format_conversations(data_list, type):
     items = []
 
@@ -110,9 +114,9 @@ def format_conversations(data_list, type):
 
     return items
 
-dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
-alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
-legal_dataset = Dataset.from_list(legal_dataset).shuffle()
+dolly_dataset = format_conversations(dolly_dataset)
+alpaca_dataset = format_conversations(alpaca_dataset)
+legal_dataset = format_conversations(legal_dataset)
 
 dolly_eval = dolly_dataset.select(range(13500, 15000))  # Last 1.5k
 alpaca_eval = alpaca_dataset.select(range(13500, 15000))
@@ -137,8 +141,6 @@ eval_dataset = interleave_datasets(
 )
 
 print("interleaving done")
-print(type(train_dataset),train_dataset[0])
-print(type(eval_dataset),eval_dataset[0])
 
 def formatting_prompts_func(examples):
    convos = examples["conversations"]
