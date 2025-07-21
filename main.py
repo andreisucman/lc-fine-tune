@@ -82,12 +82,12 @@ peft_config = LoraConfig(
 # Data preparation functions
 # ---------------------------
 
-dolly_dataset = load_dataset("databricks/databricks-dolly-15k", split = "train")
-alpaca_dataset = load_dataset("yahma/alpaca-cleaned", split = "train")
+# dolly_dataset = load_dataset("databricks/databricks-dolly-15k", split = "train")
+# alpaca_dataset = load_dataset("yahma/alpaca-cleaned", split = "train")
 legal_dataset = load_dataset("Sunchain/l-r-48k", split = "train")
 
-dolly_list = [dict(item) for item in dolly_dataset]
-alpaca_list = [dict(item) for item in alpaca_dataset]
+# dolly_list = [dict(item) for item in dolly_dataset]
+# alpaca_list = [dict(item) for item in alpaca_dataset]
 legal_list = [dict(item) for item in legal_dataset]
 
 def format_conversations(data_list, type):
@@ -110,35 +110,35 @@ def format_conversations(data_list, type):
 
     return items
 
-dolly_dataset = format_conversations(dolly_dataset, "dolly")
-alpaca_dataset = format_conversations(alpaca_dataset, "alpaca")
+# dolly_dataset = format_conversations(dolly_dataset, "dolly")
+# alpaca_dataset = format_conversations(alpaca_dataset, "alpaca")
 legal_dataset = format_conversations(legal_dataset, "legal")
 
-dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
-alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
+# dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
+# alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
 legal_dataset = Dataset.from_list(legal_dataset).shuffle()
 
-dolly_eval = dolly_dataset.select(range(13500, 15000))  # Last 1.5k
-alpaca_eval = alpaca_dataset.select(range(13500, 15000))
+# dolly_eval = dolly_dataset.select(range(13500, 15000))  # Last 1.5k
+# alpaca_eval = alpaca_dataset.select(range(13500, 15000))
 legal_eval = legal_dataset.select(range(44000, 48000))  # Last 4k for validation
 
-dolly_train = dolly_dataset.select(range(0, 13500))
-alpaca_train = alpaca_dataset.select(range(0, 13500))
+# dolly_train = dolly_dataset.select(range(0, 13500))
+# alpaca_train = alpaca_dataset.select(range(0, 13500))
 legal_train = legal_dataset.select(range(0, 44000))
 
 print("datasets defined")
 
-train_dataset = interleave_datasets(
-    [dolly_train, alpaca_train, legal_train],
-    probabilities=[0.15, 0.15,0.70],
-    seed=42
-)
+# train_dataset = interleave_datasets(
+#     [dolly_train, alpaca_train, legal_train],
+#     probabilities=[0.15, 0.15,0.70],
+#     seed=42
+# )
 
-eval_dataset = interleave_datasets(
-    [dolly_eval, alpaca_eval, legal_eval],
-    probabilities=[0.15, 0.15,0.70],
-    seed=42
-)
+# eval_dataset = interleave_datasets(
+#     [dolly_eval, alpaca_eval, legal_eval],
+#     probabilities=[0.15, 0.15,0.70],
+#     seed=42
+# )
 
 print("interleaving done")
 
@@ -147,21 +147,21 @@ def formatting_prompts_func(examples):
    texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False).removeprefix('<bos>') for convo in convos]
    return { "text" : texts, }
 
-train_dataset = train_dataset.map(formatting_prompts_func, batched = True)
-eval_dataset = eval_dataset.map(formatting_prompts_func, batched = True)
+train_dataset = legal_dataset.map(formatting_prompts_func, batched = True)
+eval_dataset = legal_train.map(formatting_prompts_func, batched = True)
 
 print("datasets ready")
 
-del dolly_dataset 
-del alpaca_dataset
+# del dolly_dataset 
+# del alpaca_dataset
 del legal_dataset
 
-del dolly_eval # Last 1.5k
-del alpaca_eval 
+# del dolly_eval # Last 1.5k
+# del alpaca_eval 
 del legal_eval  # Last 4k for validation
 
-del dolly_train
-del alpaca_train 
+# del dolly_train
+# del alpaca_train 
 del legal_train 
 
 # ---------------------------
@@ -203,17 +203,6 @@ trainer = SFTTrainer(
     peft_config=peft_config,
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
 )
-
-print("trainer patching started")
-
-from unsloth.chat_templates import train_on_responses_only
-trainer = train_on_responses_only(
-    trainer,
-    instruction_part = "<start_of_turn>user\n",
-    response_part = "<start_of_turn>model\n",
-)
-
-print("trainer patching ended")
 
 if os.path.exists(OUTPUT_DIR) and any(os.scandir(OUTPUT_DIR)):
     trainer.train(resume_from_checkpoint=True)
