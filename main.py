@@ -137,6 +137,8 @@ eval_dataset = interleave_datasets(
 )
 
 print("interleaving done")
+print(type(train_dataset),train_dataset[0])
+print(type(eval_dataset),eval_dataset[0])
 
 def formatting_prompts_func(examples):
    convos = examples["conversations"]
