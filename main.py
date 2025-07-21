@@ -122,9 +122,7 @@ dolly_train = dolly_dataset.select(range(0, 13500))
 alpaca_train = alpaca_dataset.select(range(0, 13500))
 legal_train = legal_dataset.select(range(0, 44000))
 
-del dolly_dataset
-del alpaca_dataset
-del legal_dataset
+print("datasets defined")
 
 train_dataset = interleave_datasets(
     [dolly_train, alpaca_train, legal_train],
@@ -132,15 +130,13 @@ train_dataset = interleave_datasets(
     seed=42
 )
 
-del dolly_train
-del alpaca_train
-del legal_train
-
 eval_dataset = interleave_datasets(
     [dolly_eval, alpaca_eval, legal_eval],
     probabilities=[0.15, 0.15,0.70],
     seed=42
 )
+
+print("interleaving done")
 
 def formatting_prompts_func(examples):
    convos = examples["conversations"]
