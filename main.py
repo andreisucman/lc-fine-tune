@@ -114,9 +114,9 @@ def format_conversations(data_list, type):
 
     return items
 
-dolly_dataset = format_conversations(dolly_dataset)
-alpaca_dataset = format_conversations(alpaca_dataset)
-legal_dataset = format_conversations(legal_dataset)
+dolly_dataset = format_conversations(dolly_dataset, "dolly")
+alpaca_dataset = format_conversations(alpaca_dataset, "alpaca")
+legal_dataset = format_conversations(legal_dataset, "legal")
 
 dolly_eval = dolly_dataset.select(range(13500, 15000))  # Last 1.5k
 alpaca_eval = alpaca_dataset.select(range(13500, 15000))
