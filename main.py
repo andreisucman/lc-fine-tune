@@ -150,6 +150,8 @@ def formatting_prompts_func(examples):
 train_dataset = train_dataset.map(formatting_prompts_func, batched = True)
 eval_dataset = eval_dataset.map(formatting_prompts_func, batched = True)
 
+print("datasets ready")
+
 # ---------------------------
 # Training setup with Flash Attention optimizations
 # ---------------------------
@@ -192,12 +194,16 @@ trainer = SFTTrainer(
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
 )
 
+print("trainer patching started")
+
 from unsloth.chat_templates import train_on_responses_only
 trainer = train_on_responses_only(
     trainer,
     instruction_part = "<start_of_turn>user\n",
     response_part = "<start_of_turn>model\n",
 )
+
+print("trainer patching ended")
 # Train
 trainer.train()
 
