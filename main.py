@@ -152,6 +152,18 @@ eval_dataset = eval_dataset.map(formatting_prompts_func, batched = True)
 
 print("datasets ready")
 
+del dolly_dataset 
+del alpaca_dataset
+del legal_dataset
+
+del dolly_eval # Last 1.5k
+del alpaca_eval 
+del legal_eval  # Last 4k for validation
+
+del dolly_train
+del alpaca_train 
+del legal_train 
+
 # ---------------------------
 # Training setup with Flash Attention optimizations
 # ---------------------------
