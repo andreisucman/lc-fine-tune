@@ -214,8 +214,11 @@ trainer = train_on_responses_only(
 )
 
 print("trainer patching ended")
-# Train
-trainer.train(resume_from_checkpoint=True)
+
+if os.path.exists(OUTPUT_DIR) and any(os.scandir(OUTPUT_DIR)):
+    trainer.train(resume_from_checkpoint=True)
+else:
+    trainer.train()
 
 # Save final model
 trainer.save_model(OUTPUT_DIR)
