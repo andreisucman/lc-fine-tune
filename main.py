@@ -21,7 +21,7 @@ LORA_DROPOUT = 0.05
 GRAD_ACCUM_STEPS = 1
 BATCH_SIZE = 8  # Increased for A100 80GB
 EPOCHS = 4
-LEARNING_RATE = 1e-4  # Optimized learning rate
+LEARNING_RATE = 1e-5  # Optimized learning rate
 OUTPUT_DIR = "./gemma-3-4b-it-lora-finetuned"
 REPO_ID = "Sunchain/gemma-3-4b-it-dolly-alpaca-ro"
 
@@ -215,7 +215,7 @@ trainer = train_on_responses_only(
 
 print("trainer patching ended")
 # Train
-trainer.train()
+trainer.train(resume_from_checkpoint=True)
 
 # Save final model
 trainer.save_model(OUTPUT_DIR)
