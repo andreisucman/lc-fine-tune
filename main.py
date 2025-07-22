@@ -113,7 +113,7 @@ def load_and_format(dataset_name, input_field, summary_field, max_items, config=
         raw = raw.remove_columns(drop_cols)
 
     def to_chat_format(example):
-        instruction = "Summarize the key points of the following article:"
+        instruction = "Summarize the following text:"
         input_text = example["input"].strip()
         output_text = example["output"].strip()
         chat = [
