@@ -14,4 +14,5 @@ tqdm
 flash-attn>=2.5.0
 einops
 safetensors
+evaluate
 huggingface_hub

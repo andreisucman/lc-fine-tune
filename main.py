@@ -1,6 +1,7 @@
 import os
 import torch
-from datasets import load_dataset,interleave_datasets,load_metric
+from datasets import load_dataset,interleave_datasets
+from evaluate import load
 from peft import LoraConfig, prepare_model_for_kbit_training
 from transformers import (
     AutoTokenizer,
@@ -156,7 +157,7 @@ eval_dataset = eval_dataset.map(formatting_prompts_func, batched=True, remove_co
 
 print("datasets ready")
 
-rouge = load_metric("rouge")
+rouge = evaluate.load("rouge")
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
