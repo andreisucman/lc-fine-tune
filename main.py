@@ -1,6 +1,6 @@
 import os
 import torch
-from datasets import Dataset,load_dataset,interleave_datasets
+from datasets import load_dataset,interleave_datasets
 from peft import LoraConfig, prepare_model_for_kbit_training
 from transformers import (
     AutoTokenizer,
@@ -11,6 +11,7 @@ from transformers import (
 )
 from trl import SFTTrainer
 from unsloth.chat_templates import get_chat_template
+from huggingface_hub import create_repo
 
 # Configuration
 MODEL_ID = "google/gemma-3-4b-it"
@@ -23,7 +24,7 @@ BATCH_SIZE = 8  # Increased for A100 80GB
 EPOCHS = 5
 LEARNING_RATE = 1e-5  # Optimized learning rate
 OUTPUT_DIR = "./gemma-3-4b-it-lora-finetuned"
-REPO_ID = "Sunchain/gemma-3-4b-it-dolly-alpaca-ro"
+REPO_ID = "Sunchain/gemma-3-4b-it-brevity"
 
 # Load environment variables
 HF_TOKEN = os.environ.get("HF_TOKEN")
@@ -82,87 +83,68 @@ peft_config = LoraConfig(
 # Data preparation functions
 # ---------------------------
 
-dolly_dataset = load_dataset("databricks/databricks-dolly-15k", split = "train")
-alpaca_dataset = load_dataset("yahma/alpaca-cleaned", split = "train")
-# legal_dataset = load_dataset("Sunchain/l-r-48k", split = "train")
+SUMMARY_TASKS = [
+    {"name": "xsum", "input_field": "document", "summary_field": "summary", "size": 25000},
+    {"name": "multi_news", "input_field": "document", "summary_field": "summary", "size": 25000},
+    {"name": "tldr_news", "input_field": "content", "summary_field": "tldr", "size": 25000},
+    {"name": "samsum", "input_field": "dialogue", "summary_field": "summary", "size": 15000},
+    {"name": "qmsum", "input_field": "meeting_transcripts", "summary_field": "summary", "size": 15000},
+]
 
-dolly_list = [dict(item) for item in dolly_dataset]
-alpaca_list = [dict(item) for item in alpaca_dataset]
-# legal_list = [dict(item) for item in legal_dataset]
+def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
+    input_len = len(example["input"].split())
+    output_len = len(example["output"].split())
+    return input_len >= min_input_words and output_len / input_len <= max_summary_ratio
 
-def format_conversations(data_list, type):
-    items = []
+def load_and_format(dataset_name, input_field, summary_field, max_items):
+    print(f"📥 Loading {dataset_name} ({max_items} samples)")
+    raw = load_dataset(dataset_name, split=f"train[:{max_items}]")
+    raw = raw.rename_columns({input_field: "input", summary_field: "output"})
 
-    for item in data_list:
-        if type == "dolly":
-            user_content = f"[EN] {str(item.get('instruction', ''))}\n{str(item.get('context', ''))}".strip()
-            assistant_content = str(item.get('response', '')).strip()
-        elif type == "alpaca":
-            user_content = f"[EN] {str(item.get('instruction', ''))}\n{str(item.get('input', ''))}".strip()
-            assistant_content = str(item.get('output', '')).strip()
-        elif type == "legal":
-            user_content = f"[RO] {str(item.get('instruction'))}\n{str(item.get('context', '')).strip()}".strip()
-            assistant_content = str(item.get('response', '')).strip()
-        else:
-            continue
+    def to_chat_format(example):
+        instruction = "Summarize the key points of the following text:"
+        input_text = example["input"].strip()
+        output_text = example["output"].strip()
+        chat = [
+            {"role": "user", "content": f"[EN] {instruction}\n{input_text}"},
+            {"role": "assistant", "content": output_text}
+        ]
+        return {"conversations": chat}
 
-        items.append({"conversations":[{"role": "user", "content": user_content},{"role": "assistant", "content": assistant_content}]})
+    dataset = raw.map(to_chat_format)
+    dataset = dataset.filter(filter_by_length)
+    return dataset.shuffle(seed=42)
 
-    return items
+# Load all datasets individually
+formatted_datasets = [
+    load_and_format(task["name"], task["input_field"], task["summary_field"], task["size"])
+    for task in SUMMARY_TASKS
+]
 
-dolly_dataset = format_conversations(dolly_dataset, "dolly")
-alpaca_dataset = format_conversations(alpaca_dataset, "alpaca")
-# legal_dataset = format_conversations(legal_dataset, "legal")
+# Interleave datasets with roughly equal probability
+interleaved_dataset = interleave_datasets(formatted_datasets, seed=42)
 
-dolly_dataset = Dataset.from_list(dolly_dataset).shuffle()
-alpaca_dataset = Dataset.from_list(alpaca_dataset).shuffle()
-# legal_dataset = Dataset.from_list(legal_dataset).shuffle()
+# Split into train/eval (90%/10%)
+total_len = len(interleaved_dataset)
+train_len = int(0.9 * total_len)
+train_dataset = interleaved_dataset.select(range(train_len))
+eval_dataset = interleaved_dataset.select(range(train_len, total_len))
 
-dolly_eval = dolly_dataset.select(range(13500, 15000))  # Last 1.5k
-alpaca_eval = alpaca_dataset.select(range(13500, 15000))
-# legal_eval = legal_dataset.select(range(44000, 48000))  # Last 4k for validation
+print(f"✅ Total examples: {total_len}, train: {train_len}, eval: {total_len - train_len}")
 
-dolly_train = dolly_dataset.select(range(0, 13500))
-alpaca_train = alpaca_dataset.select(range(0, 13500))
-# legal_train = legal_dataset.select(range(0, 44000))
-
-print("datasets defined")
-
-train_dataset = interleave_datasets(
-    [dolly_train, alpaca_train],
-    probabilities=[0.40,0.60],
-    seed=42
-)
-
-eval_dataset = interleave_datasets(
-    [dolly_eval, alpaca_eval],
-    probabilities=[0.40,0.60],
-    seed=42
-)
-
-print("interleaving done")
-
+# Format for Gemma chat style
 def formatting_prompts_func(examples):
-   convos = examples["conversations"]
-   texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False).removeprefix('<bos>') for convo in convos]
-   return { "text" : texts, }
+    convos = examples["conversations"]
+    texts = [
+        tokenizer.apply_chat_template(convo, tokenize=False, add_generation_prompt=False).removeprefix("<bos>")
+        for convo in convos
+    ]
+    return {"text": texts}
 
-train_dataset = train_dataset.map(formatting_prompts_func, batched = True)
-eval_dataset = eval_dataset.map(formatting_prompts_func, batched = True)
+train_dataset = train_dataset.map(formatting_prompts_func, batched=True, remove_columns=train_dataset.column_names)
+eval_dataset = eval_dataset.map(formatting_prompts_func, batched=True, remove_columns=eval_dataset.column_names)
 
 print("datasets ready")
-
-del dolly_dataset 
-del alpaca_dataset
-# del legal_dataset
-
-del dolly_eval # Last 1.5k
-del alpaca_eval 
-# del legal_eval  # Last 4k for validation
-
-del dolly_train
-del alpaca_train 
-# del legal_train 
 
 # ---------------------------
 # Training setup with Flash Attention optimizations
@@ -212,12 +194,14 @@ else:
 # Save final model
 trainer.save_model(OUTPUT_DIR)
 
+create_repo(REPO_ID, token=HF_TOKEN, private=True, exist_ok=True)
+
 # Push to Hub (adapter only)
 trainer.model.push_to_hub(
     REPO_ID,
     use_temp_dir=False,
     token=HF_TOKEN,
-    private=True
+    private=True,
 )
 
 tokenizer.push_to_hub(
