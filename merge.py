@@ -5,7 +5,7 @@ import os
 # === CONFIGURATION ===
 BASE_MODEL_ID = "google/gemma-3-4b-it"
 ADAPTER_REPO = "Sunchain/gemma-3-4b-it-dolly-alpaca-ro"
-MERGED_REPO_ID = "Sunchain/gemma-3-4b-it-dolly-alpaca-ro-merged"
+MERGED_REPO_ID = "Sunchain/gemma-3-4b-it-merged"
 MERGED_DIR = "./merged_model"
 HF_TOKEN = os.environ.get("HF_TOKEN")
 assert HF_TOKEN, "Missing HF_TOKEN in environment"
@@ -26,9 +26,9 @@ model = PeftModel.from_pretrained(base_model, ADAPTER_REPO)
 print("Merging LoRA into base model...")
 merged_model = model.merge_and_unload()
 
-# === SAVE MERGED MODEL ===
+# === SAVE MERGED MODEL (PyTorch format to avoid shared tensor error) ===
 print(f"Saving merged model to: {MERGED_DIR}")
-merged_model.save_pretrained(MERGED_DIR, safe_serialization=True)
+merged_model.save_pretrained(MERGED_DIR, safe_serialization=False)  # ← FIXED HERE
 tokenizer = AutoTokenizer.from_pretrained(ADAPTER_REPO)
 tokenizer.save_pretrained(MERGED_DIR)
 
