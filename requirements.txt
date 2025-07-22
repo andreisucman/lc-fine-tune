@@ -16,3 +16,6 @@ einops
 safetensors
 evaluate
 huggingface_hub
+absl 
+nltk 
+rouge_score

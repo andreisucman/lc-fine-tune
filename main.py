@@ -14,6 +14,8 @@ from trl import SFTTrainer
 from unsloth.chat_templates import get_chat_template
 from huggingface_hub import create_repo
 import numpy as np
+import nltk
+nltk.download("punkt")
 
 # Configuration
 MODEL_ID = "google/gemma-3-4b-it"
