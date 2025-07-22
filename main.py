@@ -99,6 +99,7 @@ def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
     output_len = len(example["output"].split())
     return input_len >= min_input_words and output_len / input_len <= max_summary_ratio
 
+
 def load_and_format(dataset_name, input_field, summary_field, max_items):
     print(f"📥 Loading {dataset_name} ({max_items} samples)")
     raw = load_dataset(dataset_name, trust_remote_code=True, split=f"train[:{max_items}]")
@@ -122,7 +123,8 @@ def load_and_format(dataset_name, input_field, summary_field, max_items):
         ]
         return {"conversations": chat}
 
-    dataset = raw.map(to_chat_format)
+    # Fix: pass task_name into the map function
+    dataset = raw.map(lambda example: to_chat_format(example, dataset_name))
     dataset = dataset.filter(filter_by_length)
     return dataset.shuffle(seed=42)
 
