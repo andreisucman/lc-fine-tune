@@ -86,9 +86,9 @@ peft_config = LoraConfig(
 # ---------------------------
 
 SUMMARY_TASKS = [
-    {"name": "abisee/cnn_dailymail", "input_field": "article", "summary_field": "highlights", "size": 30000},
-    {"name": "pszemraj/qmsum-cleaned", "input_field": "input", "summary_field": "output", "size": 15000},
-    {"name": "CJWeiss/LexSumm", "input_field": "input", "summary_field": "output", "size": 30000}, 
+    {"name": "abisee/cnn_dailymail", "config": "3.0.0", "input_field": "article", "summary_field": "highlights", "size": 30000},
+    {"name": "pszemraj/qmsum-cleaned", "config": None, "input_field": "input", "summary_field": "output", "size": 15000},
+    {"name": "CJWeiss/LexSumm", "config": None, "input_field": "input", "summary_field": "output", "size": 30000},
 ]
 
 def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
@@ -97,9 +97,13 @@ def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
     return input_len >= min_input_words and output_len / input_len <= max_summary_ratio
 
 
-def load_and_format(dataset_name, input_field, summary_field, max_items):
+def load_and_format(dataset_name, input_field, summary_field, max_items, config=None):
     print(f"📥 Loading {dataset_name} ({max_items} samples)")
-    raw = load_dataset(dataset_name, trust_remote_code=True, split=f"train[:{max_items}]")
+    if config:
+        raw = load_dataset(dataset_name, config, trust_remote_code=True, split=f"train[:{max_items}]")
+    else:
+        raw = load_dataset(dataset_name, trust_remote_code=True, split=f"train[:{max_items}]")
+        
     raw = raw.rename_columns({input_field: "input", summary_field: "output"})
 
     def to_chat_format(example, task_name):
@@ -127,7 +131,7 @@ def load_and_format(dataset_name, input_field, summary_field, max_items):
 
 # Load all datasets individually
 formatted_datasets = [
-    load_and_format(task["name"], task["input_field"], task["summary_field"], task["size"])
+    load_and_format(task["name"], task["input_field"], task["summary_field"], task["size"], task.get("config"))
     for task in SUMMARY_TASKS
 ]
 
