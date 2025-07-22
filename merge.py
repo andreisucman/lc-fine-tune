@@ -26,15 +26,24 @@ model = PeftModel.from_pretrained(base_model, ADAPTER_REPO)
 print("Merging LoRA into base model...")
 merged_model = model.merge_and_unload()
 
-# === SAVE MERGED MODEL (PyTorch format to avoid shared tensor error) ===
+# === SAVE MERGED MODEL (PyTorch format) ===
 print(f"Saving merged model to: {MERGED_DIR}")
-merged_model.save_pretrained(MERGED_DIR, safe_serialization=False)  # ← FIXED HERE
-tokenizer = AutoTokenizer.from_pretrained(ADAPTER_REPO)
+merged_model.save_pretrained(MERGED_DIR, safe_serialization=False)
 tokenizer.save_pretrained(MERGED_DIR)
 
-# === PUSH TO HUB ===
+# === PUSH TO HUB (Force PyTorch format to avoid shared tensor issue) ===
 print(f"Pushing merged model to: https://huggingface.co/{MERGED_REPO_ID}")
-merged_model.push_to_hub(MERGED_REPO_ID, token=HF_TOKEN, private=True)
-tokenizer.push_to_hub(MERGED_REPO_ID, token=HF_TOKEN, private=True)
+merged_model.push_to_hub(
+    MERGED_REPO_ID,
+    token=HF_TOKEN,
+    private=True,
+    safe_serialization=False  # ✅ FIXED
+)
+tokenizer.push_to_hub(
+    MERGED_REPO_ID,
+    token=HF_TOKEN,
+    private=True
+)
 
 print("✅ Merge and push complete.")
+
