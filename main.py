@@ -122,7 +122,7 @@ def load_and_format(dataset_name, input_field, summary_field, max_items, config=
         ]
         return {"conversations": chat}
 
-    dataset = raw.map(lambda example: to_chat_format(example, dataset_name))
+    dataset = raw.map(to_chat_format)
     dataset = dataset.filter(filter_by_length)
     return dataset.shuffle(seed=42)
 
@@ -165,6 +165,7 @@ def compute_metrics(eval_pred):
 
     # Decode token ids to strings (assuming tokenizer is available)
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
     # Some labels might be padded with -100 (ignore index), replace with pad token id or empty string
