@@ -101,7 +101,7 @@ def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
 
 def load_and_format(dataset_name, input_field, summary_field, max_items):
     print(f"📥 Loading {dataset_name} ({max_items} samples)")
-    raw = load_dataset(dataset_name, split=f"train[:{max_items}]")
+    raw = load_dataset(dataset_name, trust_remote_code=True, split=f"train[:{max_items}]")
     raw = raw.rename_columns({input_field: "input", summary_field: "output"})
 
     def to_chat_format(example, task_name):
