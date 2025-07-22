@@ -16,6 +16,6 @@ einops
 safetensors
 evaluate
 huggingface_hub
-absl 
+absl-py
 nltk 
 rouge_score
