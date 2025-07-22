@@ -242,4 +242,4 @@ tokenizer.push_to_hub(
     token=HF_TOKEN
 )
 
-print("Model pushed to Hub!")
+print("Model pushed to Hub")
