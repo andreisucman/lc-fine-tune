@@ -1,6 +1,6 @@
 import os
 import torch
-from datasets import load_dataset,interleave_datasets
+from datasets import load_dataset,interleave_datasets,load_metric
 from peft import LoraConfig, prepare_model_for_kbit_training
 from transformers import (
     AutoTokenizer,
@@ -12,6 +12,7 @@ from transformers import (
 from trl import SFTTrainer
 from unsloth.chat_templates import get_chat_template
 from huggingface_hub import create_repo
+import numpy as np
 
 # Configuration
 MODEL_ID = "google/gemma-3-4b-it"
@@ -155,6 +156,30 @@ eval_dataset = eval_dataset.map(formatting_prompts_func, batched=True, remove_co
 
 print("datasets ready")
 
+rouge = load_metric("rouge")
+
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+
+    # Decode token ids to strings (assuming tokenizer is available)
+    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+    # Some labels might be padded with -100 (ignore index), replace with pad token id or empty string
+    decoded_labels = [label.strip() for label in decoded_labels]
+
+    # Compute ROUGE scores
+    result = rouge.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+
+    # Extract and format main ROUGE scores (rouge1, rouge2, rougeL)
+    result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
+
+    # Optionally add mean prediction length for logging
+    prediction_lens = [len(pred.split()) for pred in decoded_preds]
+    result["gen_len"] = np.mean(prediction_lens)
+
+    return result
+
 # ---------------------------
 # Training setup with Flash Attention optimizations
 # ---------------------------
@@ -171,7 +196,8 @@ training_args = TrainingArguments(
     eval_strategy="epoch",
     save_strategy="epoch",
     save_total_limit=2,
-    metric_for_best_model="eval_loss",
+    metric_for_best_model="rouge1",
+    greater_is_better=True,
     load_best_model_at_end=True,
     bf16=True,  # Force BF16 for A100
     fp16=False,  # Disable FP16 when using BF16
@@ -192,6 +218,7 @@ trainer = SFTTrainer(
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     peft_config=peft_config,
+    compute_metrics=compute_metrics,
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
 )
 
