@@ -1,7 +1,7 @@
 import os
 import torch
 from datasets import load_dataset,interleave_datasets
-from evaluate import load
+import evaluate
 from peft import LoraConfig, prepare_model_for_kbit_training
 from transformers import (
     AutoTokenizer,
