@@ -103,23 +103,29 @@ def load_and_format(dataset_name, input_field, summary_field, max_items, config=
         raw = load_dataset(dataset_name, config, trust_remote_code=True, split=f"train[:{max_items}]")
     else:
         raw = load_dataset(dataset_name, trust_remote_code=True, split=f"train[:{max_items}]")
-        
+
     raw = raw.rename_columns({input_field: "input", summary_field: "output"})
 
-    def to_chat_format(example):
-        instruction = "Summarize the following text:"
+    # Remove non-uniform fields like "id" to prevent schema mismatch
+    keep_cols = {"input", "output"}
+    drop_cols = [col for col in raw.column_names if col not in keep_cols]
+    if drop_cols:
+        raw = raw.remove_columns(drop_cols)
+
+    def to_chat_format(example, task_name):
+        instruction = "Summarize the key points of the following news article:"
         input_text = example["input"].strip()
         output_text = example["output"].strip()
         chat = [
-            {"role": "user", "content": f"[EN] {instruction}\n{input_text}"},
+            {"role": "user", "content": f"{instruction}\n{input_text}"},
             {"role": "assistant", "content": output_text}
         ]
         return {"conversations": chat}
 
-    # Fix: pass task_name into the map function
-    dataset = raw.map(lambda example: to_chat_format(example))
+    dataset = raw.map(lambda example: to_chat_format(example, dataset_name))
     dataset = dataset.filter(filter_by_length)
     return dataset.shuffle(seed=42)
+
 
 # Load all datasets individually
 formatted_datasets = [
