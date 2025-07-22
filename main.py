@@ -86,12 +86,9 @@ peft_config = LoraConfig(
 # ---------------------------
 
 SUMMARY_TASKS = [
-    {"name": "xsum", "input_field": "document", "summary_field": "summary", "size": 25000},
-    {"name": "multi_news", "input_field": "document", "summary_field": "summary", "size": 25000},
-    {"name": "tldr_news", "input_field": "content", "summary_field": "tldr", "size": 25000},
-    {"name": "samsum", "input_field": "dialogue", "summary_field": "summary", "size": 15000},
-    {"name": "qmsum", "input_field": "meeting_transcripts", "summary_field": "summary", "size": 15000},
-    {"name": "lex_summ", "input_field": "full_text", "summary_field": "summary", "size": 15000}, 
+    {"name": "abisee/cnn_dailymail", "input_field": "article", "summary_field": "highlights", "size": 30000},
+    {"name": "pszemraj/qmsum-cleaned", "input_field": "input", "summary_field": "output", "size": 15000},
+    {"name": "CJWeiss/LexSumm", "input_field": "input", "summary_field": "output", "size": 30000}, 
 ]
 
 def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
