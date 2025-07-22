@@ -88,7 +88,7 @@ peft_config = LoraConfig(
 SUMMARY_TASKS = [
     {"name": "abisee/cnn_dailymail", "config": "3.0.0", "input_field": "article", "summary_field": "highlights", "size": 30000},
     {"name": "pszemraj/qmsum-cleaned", "config": None, "input_field": "input", "summary_field": "output", "size": 15000},
-    {"name": "CJWeiss/LexSumm", "config": None, "input_field": "input", "summary_field": "output", "size": 30000},
+    {"name": "CJWeiss/LexSumm", "config": "eurlexsum", "input_field": "input", "summary_field": "output", "size": 30000},
 ]
 
 def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
