@@ -106,16 +106,8 @@ def load_and_format(dataset_name, input_field, summary_field, max_items, config=
         
     raw = raw.rename_columns({input_field: "input", summary_field: "output"})
 
-    def to_chat_format(example, task_name):
-        instructions_map = {
-            "xsum": "Summarize the key points of the following news article:",
-            "multi_news": "Summarize the key points of the following multi-document news articles:",
-            "tldr_news": "Summarize the following news content briefly:",
-            "samsum": "Summarize the following dialogue:",
-            "qmsum": "Summarize the following meeting transcript:",
-            "lex_summ": "Summarize the following legal document:",
-        }
-        instruction = instructions_map.get(task_name, "Summarize the following text:")
+    def to_chat_format(example):
+        instruction = "Summarize the following text:"
         input_text = example["input"].strip()
         output_text = example["output"].strip()
         chat = [
@@ -125,7 +117,7 @@ def load_and_format(dataset_name, input_field, summary_field, max_items, config=
         return {"conversations": chat}
 
     # Fix: pass task_name into the map function
-    dataset = raw.map(lambda example: to_chat_format(example, dataset_name))
+    dataset = raw.map(lambda example: to_chat_format(example))
     dataset = dataset.filter(filter_by_length)
     return dataset.shuffle(seed=42)
 
