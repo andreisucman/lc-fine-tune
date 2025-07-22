@@ -89,6 +89,7 @@ SUMMARY_TASKS = [
     {"name": "tldr_news", "input_field": "content", "summary_field": "tldr", "size": 25000},
     {"name": "samsum", "input_field": "dialogue", "summary_field": "summary", "size": 15000},
     {"name": "qmsum", "input_field": "meeting_transcripts", "summary_field": "summary", "size": 15000},
+    {"name": "lex_summ", "input_field": "full_text", "summary_field": "summary", "size": 15000}, 
 ]
 
 def filter_by_length(example, max_summary_ratio=0.3, min_input_words=100):
@@ -101,8 +102,16 @@ def load_and_format(dataset_name, input_field, summary_field, max_items):
     raw = load_dataset(dataset_name, split=f"train[:{max_items}]")
     raw = raw.rename_columns({input_field: "input", summary_field: "output"})
 
-    def to_chat_format(example):
-        instruction = "Summarize the key points of the following text:"
+    def to_chat_format(example, task_name):
+        instructions_map = {
+            "xsum": "Summarize the key points of the following news article:",
+            "multi_news": "Summarize the key points of the following multi-document news articles:",
+            "tldr_news": "Summarize the following news content briefly:",
+            "samsum": "Summarize the following dialogue:",
+            "qmsum": "Summarize the following meeting transcript:",
+            "lex_summ": "Summarize the following legal document:",
+        }
+        instruction = instructions_map.get(task_name, "Summarize the following text:")
         input_text = example["input"].strip()
         output_text = example["output"].strip()
         chat = [
