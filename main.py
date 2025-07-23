@@ -1,18 +1,20 @@
 import os
 import torch
-from datasets import Dataset, load_dataset, interleave_datasets
-from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
+from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     AutoProcessor,
     BitsAndBytesConfig,
     TrainingArguments,
-    EarlyStoppingCallback
+    EarlyStoppingCallback,
+    DataCollatorForLanguageModeling,
 )
+from peft import LoraConfig, prepare_model_for_kbit_training, PeftModel
 from trl import SFTTrainer
 from unsloth.chat_templates import get_chat_template
 from huggingface_hub import create_repo
+from accelerate import Accelerator
 
 # === CONFIGURATION ===
 MODEL_ID = "google/gemma-3-4b-it"
@@ -21,7 +23,7 @@ LORA_RANK = 8
 LORA_ALPHA = 16
 LORA_DROPOUT = 0.05
 GRAD_ACCUM_STEPS = 1
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 EPOCHS = 5
 LEARNING_RATE = 2e-5
 FINETUNE_DIR = "./gemma-3-4b-it-lora-finetuned"
@@ -77,64 +79,53 @@ peft_config = LoraConfig(
 )
 
 # === LOAD & FORMAT DATA ===
-cnn_dataset = load_dataset("abisee/cnn_dailymail", "3.0.0", trust_remote_code=True, split="train[:3000]")
-qsum_dataset = load_dataset("pszemraj/qmsum-cleaned", split="train[:3000]")
+print("📦 Loading LexSumm dataset...")
 lex_dataset = load_dataset("CJWeiss/LexSumm", "multishort", split="train")
 
-def format_conversations(data_list, type):
-    items = []
-    for item in data_list:
-        if type == "cnn":
-            user_content = str(item.get("article", "")).strip()
-            assistant_content = str(item.get("highlights", "")).strip()
-        else:
-            user_content = str(item.get("input", "")).strip()
-            assistant_content = str(item.get("output", "")).strip()
-        items.append({"conversations": [
-            {"role": "user", "content": user_content},
-            {"role": "assistant", "content": assistant_content}
-        ]})
-    return items
+def format_lexsum(example):
+    user = example.get("input", "").strip()
+    assistant = example.get("output", "").strip()
+    return {
+        "conversations": [
+            {"role": "user", "content": user},
+            {"role": "assistant", "content": assistant}
+        ]
+    }
 
-cnn_dataset = Dataset.from_list(format_conversations(cnn_dataset, "cnn")).shuffle()
-qsum_dataset = Dataset.from_list(format_conversations(qsum_dataset, "qsum")).shuffle()
-lex_dataset = Dataset.from_list(format_conversations(lex_dataset, "lex")).shuffle()
+print("🛠️ Formatting conversations...")
+lex_dataset = lex_dataset.map(format_lexsum, num_proc=4, remove_columns=lex_dataset.column_names)
 
-def split_dataset_fraction(dataset, fraction):
-    if not 0 < fraction < 1:
-        raise ValueError("Fraction must be between 0 and 1 (exclusive).")
-    
-    split_index = round(fraction * len(dataset))
-    first_part = dataset.select(range(split_index))
-    remaining_part = dataset.select(range(split_index, len(dataset)))
+# === Tokenize with chat template ===
+def preprocess_function(example):
+    formatted = tokenizer.apply_chat_template(example["conversations"], tokenize=False, add_generation_prompt=False)
+    if not formatted.strip():
+        return {"input_ids": [], "attention_mask": []}
+    return tokenizer(formatted, truncation=True, padding="max_length", max_length=512)
 
-    return first_part, remaining_part
+accelerator = Accelerator()
 
-# Split datasets
-cnn_train, cnn_eval = split_dataset_fraction(cnn_dataset, 0.9)
-qsum_train, qsum_eval = split_dataset_fraction(qsum_dataset, 0.9)
-lex_train, lex_eval = split_dataset_fraction(lex_dataset, 0.9)
+with accelerator.main_process_first():
+    tokenized_dataset = lex_dataset.map(
+        preprocess_function,
+        batched=True,
+        num_proc=4,
+        remove_unused_columns=True,
+        desc="Tokenizing dataset"
+    )
 
-# Interleaved datasets
-train_dataset = interleave_datasets(
-    [cnn_train, qsum_train, lex_train],
-    probabilities=[0.125, 0.125, 0.75],
-    seed=42
+# === Filter empty examples ===
+tokenized_dataset = tokenized_dataset.filter(
+    lambda example: len(example["input_ids"]) > 0 and any(id != tokenizer.pad_token_id for id in example["input_ids"]),
+    num_proc=4
 )
 
-eval_dataset = interleave_datasets(
-    [cnn_eval, qsum_eval, lex_eval],
-    probabilities=[0.125, 0.125, 0.75],
-    seed=42
-)
+# === Split train/validation ===
+split = tokenized_dataset.train_test_split(test_size=0.1, seed=42)
+train_dataset = split["train"]
+eval_dataset = split["test"]
 
-def formatting_prompts_func(examples):
-    convos = examples["conversations"]
-    texts = [tokenizer.apply_chat_template(convo, tokenize=False, add_generation_prompt=False).removeprefix("<bos>") for convo in convos]
-    return {"text": texts}
-
-train_dataset = train_dataset.map(formatting_prompts_func, batched=True)
-eval_dataset = eval_dataset.map(formatting_prompts_func, batched=True)
+# === Collator ===
+data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
 
 # === TRAINING ARGS ===
 training_args = TrainingArguments(
@@ -147,6 +138,7 @@ training_args = TrainingArguments(
     optim="paged_adamw_8bit",
     weight_decay=0.01,
     logging_steps=100,
+    logging_dir=os.path.join(FINETUNE_DIR, "logs"),
     eval_strategy="epoch",
     save_strategy="epoch",
     save_total_limit=2,
@@ -163,6 +155,8 @@ training_args = TrainingArguments(
     gradient_checkpointing_kwargs={"use_reentrant": False},
     max_steps=-1,
     group_by_length=True,
+    disable_tqdm=False,
+    logging_first_step=True,
 )
 
 # === TRAINING ===
@@ -172,6 +166,7 @@ trainer = SFTTrainer(
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     peft_config=peft_config,
+    data_collator=data_collator,
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
 )
 
@@ -184,16 +179,8 @@ else:
 trainer.save_model(FINETUNE_DIR)
 create_repo(ADAPTER_REPO_ID, token=HF_TOKEN, private=True, exist_ok=True)
 
-trainer.model.push_to_hub(
-    ADAPTER_REPO_ID,
-    token=HF_TOKEN,
-    private=True
-)
-tokenizer.push_to_hub(
-    ADAPTER_REPO_ID,
-    token=HF_TOKEN,
-    private=True
-)
+trainer.model.push_to_hub(ADAPTER_REPO_ID, token=HF_TOKEN, private=True)
+tokenizer.push_to_hub(ADAPTER_REPO_ID, token=HF_TOKEN, private=True)
 
 # === MERGE AND PUSH FULL MODEL ===
 print("🔄 Reloading base model for merging...")
