@@ -101,12 +101,12 @@ qsum_dataset = Dataset.from_list(format_conversations(qsum_dataset, "qsum")).shu
 lex_dataset = Dataset.from_list(format_conversations(lex_dataset, "lex")).shuffle()
 
 train_dataset = interleave_datasets(
-    [cnn_dataset.select(range(0, 2700)), qsum_dataset.select(range(0, 2700)), lex_dataset],
+    [cnn_dataset.select(range(0, 2700)), qsum_dataset.select(range(0, 2700)), lex_dataset.select(range(0, int(0.9 * len(lex_dataset))))],
     probabilities=[0.125, 0.125, 0.75],
     seed=42
 )
 eval_dataset = interleave_datasets(
-    [cnn_dataset.select(range(2700, 3000)), qsum_dataset.select(range(2700, 3000)), lex_dataset],
+    [cnn_dataset.select(range(2700, 3000)), qsum_dataset.select(range(2700, 3000)), lex_dataset.select(range(int(0.9 * len(lex_dataset)), len(lex_dataset)))],
     probabilities=[0.125, 0.125, 0.75],
     seed=42
 )
