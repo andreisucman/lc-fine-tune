@@ -17,8 +17,8 @@ from huggingface_hub import create_repo
 # === CONFIGURATION ===
 MODEL_ID = "google/gemma-3-4b-it"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-LORA_RANK = 16
-LORA_ALPHA = 32
+LORA_RANK = 8
+LORA_ALPHA = 16
 LORA_DROPOUT = 0.05
 GRAD_ACCUM_STEPS = 1
 BATCH_SIZE = 8
