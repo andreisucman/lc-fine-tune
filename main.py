@@ -93,14 +93,14 @@ def format_lexsum(example):
     }
 
 print("🛠️ Formatting conversations...")
-lex_dataset = lex_dataset.map(format_lexsum, num_proc=4, remove_columns=lex_dataset.column_names)
+lex_dataset = lex_dataset.map(format_lexsum, num_proc=4)
 
 # === Tokenize with chat template ===
 def preprocess_function(example):
     formatted = tokenizer.apply_chat_template(example["conversations"], tokenize=False, add_generation_prompt=False)
     if not formatted.strip():
         return {"input_ids": [], "attention_mask": []}
-    return tokenizer(formatted, truncation=True, padding="max_length")
+    return tokenizer(formatted, truncation=True, padding=True)
 
 accelerator = Accelerator()
 
@@ -109,7 +109,6 @@ with accelerator.main_process_first():
         preprocess_function,
         batched=True,
         num_proc=4,
-        remove_unused_columns=True,
         desc="Tokenizing dataset"
     )
 
