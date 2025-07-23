@@ -100,7 +100,7 @@ def preprocess_function(example):
     formatted = tokenizer.apply_chat_template(example["conversations"], tokenize=False, add_generation_prompt=False)
     if not formatted.strip():
         return {"input_ids": [], "attention_mask": []}
-    return tokenizer(formatted, truncation=True, padding="max_length", max_length=512)
+    return tokenizer(formatted, truncation=True, padding="max_length")
 
 accelerator = Accelerator()
 
