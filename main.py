@@ -83,8 +83,8 @@ print("📦 Loading LexSumm dataset...")
 lex_dataset = load_dataset("CJWeiss/LexSumm", "multishort", split="train")
 
 def format_lexsum(example):
-    user = example.get("input", "").strip()
-    assistant = example.get("output", "").strip()
+    user = (example.get("input") or "").strip()
+    assistant = (example.get("output") or "").strip()
     return {
         "conversations": [
             {"role": "user", "content": user},
@@ -107,7 +107,7 @@ accelerator = Accelerator()
 with accelerator.main_process_first():
     tokenized_dataset = lex_dataset.map(
         preprocess_function,
-        batched=True,
+        batched=False,
         num_proc=4,
         desc="Tokenizing dataset"
     )
