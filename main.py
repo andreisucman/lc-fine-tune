@@ -79,7 +79,7 @@ peft_config = LoraConfig(
 # === LOAD & FORMAT DATA ===
 cnn_dataset = load_dataset("abisee/cnn_dailymail", "3.0.0", trust_remote_code=True, split="train[:3000]")
 qsum_dataset = load_dataset("pszemraj/qmsum-cleaned", split="train[:3000]")
-lex_dataset = load_dataset("CJWeiss/LexSumm", "multishort", split="train[:3000]")
+lex_dataset = load_dataset("CJWeiss/LexSumm", "multishort", split="train")
 
 def format_conversations(data_list, type):
     items = []
@@ -101,13 +101,13 @@ qsum_dataset = Dataset.from_list(format_conversations(qsum_dataset, "qsum")).shu
 lex_dataset = Dataset.from_list(format_conversations(lex_dataset, "lex")).shuffle()
 
 train_dataset = interleave_datasets(
-    [cnn_dataset.select(range(0, 2700)), qsum_dataset.select(range(0, 2700)), lex_dataset.select(range(0, 2700))],
-    probabilities=[0.25, 0.25, 0.5],
+    [cnn_dataset.select(range(0, 2700)), qsum_dataset.select(range(0, 2700)), lex_dataset],
+    probabilities=[0.125, 0.125, 0.75],
     seed=42
 )
 eval_dataset = interleave_datasets(
-    [cnn_dataset.select(range(2700, 3000)), qsum_dataset.select(range(2700, 3000)), lex_dataset.select(range(2700, 3000))],
-    probabilities=[0.25, 0.25, 0.5],
+    [cnn_dataset.select(range(2700, 3000)), qsum_dataset.select(range(2700, 3000)), lex_dataset],
+    probabilities=[0.125, 0.125, 0.75],
     seed=42
 )
 
