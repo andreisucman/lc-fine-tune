@@ -100,13 +100,30 @@ cnn_dataset = Dataset.from_list(format_conversations(cnn_dataset, "cnn")).shuffl
 qsum_dataset = Dataset.from_list(format_conversations(qsum_dataset, "qsum")).shuffle()
 lex_dataset = Dataset.from_list(format_conversations(lex_dataset, "lex")).shuffle()
 
+def split_dataset_fraction(dataset, fraction):
+    if not 0 < fraction < 1:
+        raise ValueError("Fraction must be between 0 and 1 (exclusive).")
+    
+    split_index = round(fraction * len(dataset))
+    first_part = dataset.select(range(split_index))
+    remaining_part = dataset.select(range(split_index, len(dataset)))
+
+    return first_part, remaining_part
+
+# Split datasets
+cnn_train, cnn_eval = split_dataset_fraction(cnn_dataset, 0.9)
+qsum_train, qsum_eval = split_dataset_fraction(qsum_dataset, 0.9)
+lex_train, lex_eval = split_dataset_fraction(lex_dataset, 0.9)
+
+# Interleaved datasets
 train_dataset = interleave_datasets(
-    [cnn_dataset.select(range(0, 2700)), qsum_dataset.select(range(0, 2700)), lex_dataset.select(range(0, int(0.9 * len(lex_dataset))))],
+    [cnn_train, qsum_train, lex_train],
     probabilities=[0.125, 0.125, 0.75],
     seed=42
 )
+
 eval_dataset = interleave_datasets(
-    [cnn_dataset.select(range(2700, 3000)), qsum_dataset.select(range(2700, 3000)), lex_dataset.select(range(int(0.9 * len(lex_dataset)), len(lex_dataset)))],
+    [cnn_eval, qsum_eval, lex_eval],
     probabilities=[0.125, 0.125, 0.75],
     seed=42
 )
